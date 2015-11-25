@@ -15,13 +15,8 @@ import java.util.ArrayList;
 
 import data.ExhibitionItem;
 
-/**
- * ProfilerAgent.java
- * 
- * @author Peter Ledberg
- * @author David Kufa
- * @version 1.0
- */
+
+
 public class ProfilerAgent extends Agent {
 
     /*
@@ -33,9 +28,11 @@ public class ProfilerAgent extends Agent {
     //private enum gender {Male,Female};
     private String gender;
     private String[] interest;
+    private int maxprice;
+
 
     private ArrayList<ExhibitionItem> exhibitionItems;
-    private ArrayList<AID> guideAgents = new ArrayList<>();
+    private ArrayList<AID> guideAgents = new ArrayList<AID>();
 
     private Agent thisAgent = this;
 
@@ -55,7 +52,8 @@ public class ProfilerAgent extends Agent {
         //private enum gender {Male,Female};
         gender = "Female";
         interest = new String[]{"art","music"};
-        exhibitionItems = new ArrayList<>();
+        exhibitionItems = new ArrayList<ExhibitionItem>();
+        maxprice = 200;
     }
 
     @Override
@@ -83,56 +81,47 @@ public class ProfilerAgent extends Agent {
                 ACLMessage msg = receive();
                 
                 if (msg != null) {
-                    // IF-satsen här nedan gör inget?
+
+                    String[] lines = msg.getContent().split("\n");
+                    String[] content = lines[0].split(",");
+
+                    // IF-satsen hï¿½r nedan gï¿½r inget?
                     if (msg.getSender().equals(getDefaultDF())) {
                         System.out.println("Subscription");
-                    } else {
-                        String[] lines = msg.getContent().split("\n");
-                        String[] content = lines[0].split(",");
-                        
-                        // Parse message depending on ontology
-                        switch (msg.getOntology()) {
-                            case SHORT_ITEM_DESC_STRING:
-                            	System.out.println("Profiler: received items (short description).");
-                                try {
-                                    String genre = content[1];
-                                    int age = Integer.parseInt(content[2]);
-                                    String gender = content[3];
-                                    ExhibitionItem item = new ExhibitionItem(
-                                            gender, genre, age);
-                                    
-                                    item.setID(Integer.parseInt(content[0]));
-                                    exhibitionItems.add(item);
+                    }
+                    else if (msg.getOntology().equals(SHORT_ITEM_DESC_STRING)) {
+                        System.out.println("Profiler: received items (short description).");
+                        try {
+                            String genre = content[1];
+                            int age = Integer.parseInt(content[2]);
+                            String gender = content[3];
+                            ExhibitionItem item = new ExhibitionItem(
+                                    gender, genre, age);
 
-                                    //addBehaviour(new SimpleAchieveREInitiator(
-                                    //      thisAgent, ));
-                                } catch (Exception e) {}
+                            item.setID(Integer.parseInt(content[0]));
+                            exhibitionItems.add(item);
 
-                                System.out.print("Profiler: ");
-                                for (String str : content) {
-                                    System.out.print(str + " ");
-                                }
+                            //addBehaviour(new SimpleAchieveREInitiator(
+                            //      thisAgent, ));
+                        } catch (Exception e) {}
 
-                                break;
-                            case FULL_ITEM_DESC_STRING:
-                            	System.out.println("Profiler: received items (detailed description).");
-                            	
-                                break;
-                            case REQUEST_EXHIBITION_ITEM_DETAILS_STRING: 
-                                System.out.print("full ");
-                                for (String str : content) {
-                                    System.out.print(str + " ");
-                                }
+                        System.out.print("Profiler: ");
+                        for (String str : content) {
+                            System.out.print(str + " ");
+                        }
 
-                                break;
-                            case "BEGINNING": 
-                                System.out.println("BEGINNING " + msg.toString());
+                    }
+                    else if (msg.getOntology().equals(FULL_ITEM_DESC_STRING))
+                        System.out.println("Profiler: received items (detailed description).");
 
-                                break;
+
+                    else if (msg.getOntology().equals(REQUEST_EXHIBITION_ITEM_DETAILS_STRING)){
+                        System.out.print("full ");
+                        for (String str : content) {
+                            System.out.print(str + " ");
                         }
                     }
                 }
-                
                 else{ block(); }
             }
         });
@@ -233,5 +222,41 @@ public class ProfilerAgent extends Agent {
         }
         
         return agents;
+    }
+
+    private void performShadeBidStrategy(ACLMessage msg){
+
+        String[] content = msg.getContent().split(",");
+
+        try{
+            String itemName = content[0];
+            String itemGenre = content[1];
+            int itemPrice = Integer.parseInt(content[2]);
+
+            if(checkInterest(itemGenre)){
+                ACLMessage returnMsg = msg.createReply();
+                if (itemPrice < maxprice){
+
+                    returnMsg.setContent("accept_bid,"+itemPrice);
+                    // Bid for the item..
+                    //send();
+                }
+                else {
+
+                    returnMsg.setContent("reject_bid");
+                    System.out.println(returnMsg.getContent());
+                }
+                send(returnMsg);
+            }
+        }catch (Exception e){System.out.println(e);}
+
+
+    }
+    private boolean checkInterest(String genre){
+        for (String i : interest){
+            if(i.equalsIgnoreCase(genre))
+                return true;
+        }
+        return false;
     }
 }

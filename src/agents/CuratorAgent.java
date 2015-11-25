@@ -8,18 +8,15 @@ import jade.core.behaviours.*;
 import jade.domain.DFService;
 import jade.domain.FIPAAgentManagement.*;
 import jade.domain.FIPAException;
+import jade.domain.FIPANames;
 import jade.domain.FIPANames.InteractionProtocol;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
+import jade.proto.AchieveREInitiator;
+import jade.proto.AchieveREResponder;
 import jade.proto.SimpleAchieveREResponder;
 
-/**
- * CuratorAgent.java
- * 
- * @author Peter Ledberg
- * @author David Kufa
- * @version 1.0
- */
+
 public class CuratorAgent extends Agent {
 
     private Exhibition exhibition = new Exhibition("DefaultName");
@@ -32,6 +29,10 @@ public class CuratorAgent extends Agent {
     private final String SHORT_ITEM_DESC_STRING = "short-item-description";
     private final String FULL_ITEM_DESC_STRING = "full-item-description";
 
+
+    private final String BUYING_ITEMS_REGTYPE = "item-buying";
+    private final String BUYING_ITEMS_REGNAME = "exhibition-item-buying";
+
     private final Agent thisAgent = this;
     private DataStore dataStore = new DataStore();
 
@@ -39,11 +40,25 @@ public class CuratorAgent extends Agent {
     protected void setup() {
 
         System.out.println("Curator-agent: "+getAID().getName()+" is ready.");
-        initiateAuction();
+        initiateAuction(createDummyItem());
 
         registerService("item-sending", "send-exhibition-content");
         ParallelBehaviour parallelBehaviour = new ParallelBehaviour();
 
+        parallelBehaviour.addSubBehaviour(new AchieveREResponder(thisAgent, MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_DUTCH_AUCTION)) {
+
+            @Override
+            protected ACLMessage handleRequest(ACLMessage request) throws NotUnderstoodException, RefuseException {
+                System.out.println("Häääärligt  " + request.getContent());
+                if (request.getContent().equals("reject_bid")) {
+
+                }
+                return super.handleRequest(request);
+
+            }
+        });
+            
+        
         // BEHAVIOUR
         parallelBehaviour.addSubBehaviour(new SimpleAchieveREResponder(thisAgent,
                 MessageTemplate.MatchOntology(REQUEST_EXHIBITION_ITEMS_STRING)){
@@ -55,16 +70,10 @@ public class CuratorAgent extends Agent {
                 return getItemDescription("short", request);
             }
 
-            @Override
-            protected ACLMessage prepareResultNotification(ACLMessage request, 
-                    ACLMessage response) throws FailureException {
-                return super.prepareResultNotification(request, response);
-            }
         });
 
         // BEHAVIOUR
-        parallelBehaviour.addSubBehaviour(new SimpleAchieveREResponder(thisAgent,
-                MessageTemplate.MatchOntology(REQUEST_EXHIBITION_ITEM_DETAILS_STRING)) {
+        parallelBehaviour.addSubBehaviour(new SimpleAchieveREResponder(thisAgent,MessageTemplate.MatchOntology(REQUEST_EXHIBITION_ITEM_DETAILS_STRING)) {
 
             @Override
             protected ACLMessage prepareResponse(ACLMessage request) throws 
@@ -92,20 +101,28 @@ public class CuratorAgent extends Agent {
     /*
      * TODO
      */
-    private void initiateAuction() {
-    	System.out.println("Curator: beginning a new auction.");
-        AID[] profilers = lookForService("tour-visiting");
+    private void initiateAuction(ExhibitionItem item){
+
+        AID[] profilers = lookForService(BUYING_ITEMS_REGTYPE);
+
         ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+
         msg.setSender(getAID());
-        msg.setContent("BEGINNING");
-        
-        for (AID profiler : profilers) {
+
+
+        int startingPrice = item.getPrice() * 10;
+
+        String msgString = item.getName()+","+item.getGenre()+","+startingPrice;
+        msg.setContent(msgString);
+
+        System.out.println(profilers.length);
+        for (AID profiler : profilers){
             msg.addReceiver(profiler);
+
         }
-        
-        msg.setProtocol(InteractionProtocol.FIPA_DUTCH_AUCTION);
-        send(msg);
-        //addBehaviour(new AchieveREInitiator(this, msg));
+        msg.setProtocol(FIPANames.InteractionProtocol.FIPA_DUTCH_AUCTION);
+
+        addBehaviour(new AchieveREInitiator(thisAgent,msg));
     }
 
     private ACLMessage getItemDescription(String type, ACLMessage message) {
@@ -114,25 +131,21 @@ public class CuratorAgent extends Agent {
         msg.setSender(getAID());
         
         String messageContent = "";
-        switch (type) {
-            case "short":
-                msg.setOntology(SHORT_ITEM_DESC_STRING);
-                
-                for (ExhibitionItem item : exhibition.getExhibitionItems()) {
-                    messageContent += item.getShortItemDescription() + "," + 
-                            getAID() + "\n";
-                }
-                
-                break;
-        
-            case "full":
-                msg.setOntology(FULL_ITEM_DESC_STRING);
-                
-                for (ExhibitionItem item : exhibition.getExhibitionItems()){
-                    messageContent += item.getFullItemDescription() + "\n";
-                }
+        if (type.equals("short")){
+            msg.setOntology(SHORT_ITEM_DESC_STRING);
+
+            for (ExhibitionItem item : exhibition.getExhibitionItems()) {
+                messageContent += item.getShortDescription() + "," +
+                        getAID() + "\n";
+            }
         }
-        
+        else if (type.equals("full")){
+            msg.setOntology(FULL_ITEM_DESC_STRING);
+
+            for (ExhibitionItem item : exhibition.getExhibitionItems()){
+                messageContent += item.getFullItemDescription() + "\n";
+            }
+        }
         msg.setContent(messageContent);
         System.out.println("Curator: sending list of items.");
         
@@ -171,6 +184,18 @@ public class CuratorAgent extends Agent {
         }
         
         return agents;
+    }
+
+
+
+
+    // Ta bort..
+
+    private ExhibitionItem createDummyItem(){
+        ExhibitionItem item = new ExhibitionItem("Female","Art",17);
+        item.setName("Mona Lisa");
+        item.setPrice(100);
+        return item;
     }
 
 }

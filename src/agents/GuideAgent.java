@@ -11,13 +11,7 @@ import jade.domain.FIPAException;
 import jade.lang.acl.ACLMessage;
 import java.util.ArrayList;
 
-/**
- * GuideAgent.java
- * 
- * @author Peter Ledberg
- * @author David Kufa
- * @version 1.0
- */
+
 public class GuideAgent extends Agent{
 
     private final String REQUEST_EXHIBITION_ITEMS_STRING = "request-exhibition-items";
@@ -32,8 +26,8 @@ public class GuideAgent extends Agent{
     private final String CURATOR_REQUEST_KEY = "curator-request-key";
     private final String VIRTUAL_TOUR_REQUEST_KEY = "virtual-tour-request-key";
 
-    private ArrayList<ProfilerData> requestedTours = new ArrayList<>();
-    private ArrayList<ExhibitionItem> exhibitionItems = new ArrayList<>();
+    private ArrayList<ProfilerData> requestedTours = new ArrayList<ProfilerData>();
+    private ArrayList<ExhibitionItem> exhibitionItems = new ArrayList<ExhibitionItem>();
 
     private final Agent thisAgent = this;
     private DataStore dataStore = new DataStore();
@@ -56,54 +50,50 @@ public class GuideAgent extends Agent{
                     final ACLMessage message = msg;
                         
                     // Parse message depending on ontology
-                    switch (msg.getOntology()) {
-                        case REQUEST_VIRTUAL_TOUR_STRING:
-                        	System.out.println("Guide: received virtual tour request.");
-                            addBehaviour(new OneShotBehaviour(thisAgent) {
+                    if (msg.getOntology().equals(REQUEST_VIRTUAL_TOUR_STRING)){
+                        System.out.println("Guide: received virtual tour request.");
+                        addBehaviour(new OneShotBehaviour(thisAgent) {
+                            @Override
+                            public void action() {
+                                addGuideRequest(content, message.getSender());
+                            }
+                        });
+
+                        AID[] curatorAgents = lookForService(ITEM_SENDING_LOOKUPSTRING);
+                        ACLMessage curatorMsg = new ACLMessage(ACLMessage.REQUEST);
+                        curatorMsg.setSender(getAID());
+                        curatorMsg.setOntology(REQUEST_EXHIBITION_ITEMS_STRING);
+
+                        for (AID agent : curatorAgents) {
+                            curatorMsg.addReceiver(agent);
+                        }
+
+                        System.out.println("Guide: requesting museum items.");
+                        send(curatorMsg);
+                    }else if (msg.getOntology().equals(SHORT_ITEM_DESC_STRING)){
+                        System.out.println("Guide: received museum items.");
+                        final String[] lines = msg.getContent().split("\n");
+                        SequentialBehaviour sequentialBehaviour = new SequentialBehaviour(thisAgent);
+                        sequentialBehaviour.addSubBehaviour(new OneShotBehaviour() {
+                            @Override
+                            public void action() {
+                                addExhibitionItem(lines);
+                            }
+                        });
+
+                        ParallelBehaviour parallelBehaviour = new ParallelBehaviour(thisAgent,requestedTours.size());
+                        for (ProfilerData profilerData : requestedTours){
+                            final ProfilerData data = profilerData;
+                            parallelBehaviour.addSubBehaviour(new OneShotBehaviour() {
                                 @Override
                                 public void action() {
-                                    addGuideRequest(content, message.getSender());
+                                    createVirtualTours(data, exhibitionItems);
                                 }
                             });
+                        }
+                        sequentialBehaviour.addSubBehaviour(parallelBehaviour);
+                        addBehaviour(sequentialBehaviour);
 
-                            AID[] curatorAgents = lookForService(ITEM_SENDING_LOOKUPSTRING);
-                            ACLMessage curatorMsg = new ACLMessage(ACLMessage.REQUEST);
-                            curatorMsg.setSender(getAID());
-                            curatorMsg.setOntology(REQUEST_EXHIBITION_ITEMS_STRING);
-
-                            for (AID agent : curatorAgents) {
-                                curatorMsg.addReceiver(agent);
-                            }
-                            
-                            System.out.println("Guide: requesting museum items.");
-                            send(curatorMsg);
-
-                            break;
-                        case SHORT_ITEM_DESC_STRING: 
-                        	System.out.println("Guide: received museum items.");
-                            final String[] lines = msg.getContent().split("\n");
-                            SequentialBehaviour sequentialBehaviour = new SequentialBehaviour(thisAgent);
-                            sequentialBehaviour.addSubBehaviour(new OneShotBehaviour() {
-                                @Override
-                                public void action() {
-                                    addExhibitionItem(lines);
-                                }
-                            });
-
-                            ParallelBehaviour parallelBehaviour = new ParallelBehaviour(thisAgent,requestedTours.size());
-                            for (ProfilerData profilerData : requestedTours){
-                                final ProfilerData data = profilerData;
-                                parallelBehaviour.addSubBehaviour(new OneShotBehaviour() {
-                                    @Override
-                                    public void action() {
-                                        createVirtualTours(data, exhibitionItems);
-                                    }
-                                });
-                            }
-                            sequentialBehaviour.addSubBehaviour(parallelBehaviour);
-                            addBehaviour(sequentialBehaviour);
-
-                            break;
                     }
                 }
                 
@@ -120,8 +110,7 @@ public class GuideAgent extends Agent{
         }
         
         // Printout a dismissal message
-        System.out.println("Guide-agent " + getAID().getName() + 
-                " terminating.");
+        System.out.println("Guide-agent " + getAID().getName() + " terminating.");
     }
     
     private void addGuideRequest(String[] content, AID sender) {            
@@ -163,7 +152,7 @@ public class GuideAgent extends Agent{
                   agent.getGender().equalsIgnoreCase(item.getRecommendedGender()) &&
                   checkInterest(agent.getInterest(),item.getGenre())) {
 
-                messageString += item.getShortItemDescription() +"\n";
+                messageString += item.getShortDescription() +"\n";
             }
         }
 
